@@ -1,65 +1,76 @@
-import matplotlib.pyplot as plt
+import yfinance as yf
+import datetime as dt
 import pandas as pd
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import r2_score, mean_absolute_error
+import numpy as np
+import matplotlib.pyplot as plt
 
-# Load data and define features
-df = pd.read_csv('nflx_2014_2023.csv', encoding='latin1')
-plt.figure(figsize=(12, 8))
+trainStartDate = "2020-01-01"
+trainEndDate = "2024-01-01"
+ticker = '^NSEI'
+dfTrain = yf.download(ticker, start=trainStartDate, end=trainEndDate)
+valsSeries = dfTrain['Close'].values
+valsSeries = valsSeries.tolist()
 
-# Define features and target column name
-x_col_names = ['rsi_7','rsi_14','cci_7','cci_14','sma_50','ema_50','sma_100','ema_100','macd','bollinger','TrueRange','atr_7','atr_14']
-TARGET_COL = 'next_day_close'
+dates = dfTrain.index
+actualVals = list(zip(valsSeries, dates))
+Yt_list = [
+    (round(price_list[0], 2), timestamp)  
+    for price_list, timestamp in actualVals
+]
+print(Yt_list[0])
 
-# --- 1. Chronological Split ---
-split_point = int(len(df) * 0.8)
+def plotChart(vals, predictedVals):
+  dates_arr1 = [item[1] for item in predictedVals]
+  values_arr1 = [item[0] for item in predictedVals]
+  dates_arr2 = [item[1] for item in vals]
+  values_arr2 = [item[0] for item in vals]
 
-X = df[x_col_names]
-Y = df[TARGET_COL]
+  diff_arr = []
+  diff_dates_arr = []
+  for i in range(len(values_arr1)):
+    diff_arr.append(values_arr2[i] - values_arr1[i])
+    diff_dates_arr.append(dates_arr1[i])
 
-X_train = X.iloc[:split_point]
-Y_train = Y.iloc[:split_point]
+  plt.figure(figsize=(12, 7))
+  plt.plot(dates_arr1, values_arr1, label='Predicted Values', marker='', linestyle='-', linewidth=2, color='red')
+  plt.plot(dates_arr2, values_arr2, label='Actual Values', marker='', linestyle='-', linewidth=2, color='blue')
+  plt.plot(diff_dates_arr, diff_arr, label='Error', marker='', linestyle='-', linewidth=2, color='green')
+  plt.title(f'Comparison of {ticker} and Model Predictions Over Time')
+  plt.xlabel('Date')
+  plt.ylabel('Value (Price)')
+  plt.legend()
+  plt.grid(True, linestyle=':', alpha=0.6)
+  plt.xticks(rotation=45, ha='right')
+  plt.tight_layout()
+  plt.show()
+def armaModel(vals, alpha):
+  predictions = []
+  phi = 0.5
+  theta = 0.5
+  predError = 0
+  prevError = 0
+  i = 1
+  while i < len(vals):
+    predictedVal = (phi * vals[i-1][0]) + (theta * predError)
+    predError = vals[i][0] - predictedVal
+    phi = phi + alpha * predError * vals[i-1][0]
+    theta = theta + alpha * predError * predError
+    predictions.append((round(predictedVal, 2), vals[i][1]))
+    prevError = predError
+    i = i + 1
+  return predictions
+def mae(arr1, arr2, testStartPoint):
+  sum = 0
+  testSize = pd.to_datetime(trainEndDate) - pd.to_datetime(testStartPoint)
+  for i in range(testSize.days, len(arr2)):
+    sum += abs(arr1[i][0] - arr2[i][0])
+  return round(sum / len(arr2), 2)
 
-X_test = X.iloc[split_point:]
-Y_test = Y.iloc[split_point:]
-
-# ----------------------------------------------------
-# 2. Refactor: Define a cleaner fit function (optional, but good practice)
-# ----------------------------------------------------
-def train_linear_model(X_data, Y_data):
-    """Trains a Linear Regression model using provided X and Y data."""
-    model = LinearRegression()
-    model.fit(X_data, Y_data)
-    return model
-
-# ----------------------------------------------------
-# 3. Train the Model and Test
-# ----------------------------------------------------
-# TRAIN the model on the split TRAINING data
-LM = train_linear_model(X_train, Y_train)
-
-# Calculate R2 on the TRAINING set (to check for near-perfect fit)
-r2_train = LM.score(X_train, Y_train)
-
-# Generate predictions on the UNSEEN TEST data
-Y_pred_test = LM.predict(X_test)
-
-# Calculate R2 on the TESTING set (to check for generalization)
-r2_test = r2_score(Y_test, Y_pred_test)
-
-# Calculate MAE (Mean Absolute Error) for the actual dollar error
-mae_test = mean_absolute_error(Y_test, Y_pred_test)
-
-print("--- Model Results ---")
-print(f'R2 (Training Set): {r2_train:.4f} (High value is an overfitting concern)')
-print(f'R2 (Testing Set):  {r2_test:.4f} (This is the true measure of performance)')
-print(f"MAE (Test Set Error): ${mae_test:.2f} (Average dollar error)")
-
-# Print coefficients for insight
-print('\nCoefficients (Feature Weights):')
-for name, coef in zip(x_col_names, LM.coef_):
-    print(f"  {name}: {coef:.2f}")
-
-# Print a snippet of test predictions
-print('\nFirst 5 Test Predictions:')
-print(Y_pred_test[:5]) 
+size = 900
+vals = Yt_list[:size]
+predictedVals = armaModel(vals, 5e-11)
+i = 0
+vals = Yt_list[1:size]
+errorVal = mae(vals, predictedVals, "2023-01-01")
+print(f'MAE: {errorVal}')
+plotChart(vals, predictedVals)
