@@ -5,8 +5,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 trainStartDate = "2020-01-01"
-trainEndDate = "2024-01-01"
-ticker = '^NSEI'
+trainEndDate = "2025-01-01"
+ticker = 'NVDA'
+alpha = 9e-6
+
 dfTrain = yf.download(ticker, start=trainStartDate, end=trainEndDate)
 valsSeries = dfTrain['Close'].values
 valsSeries = valsSeries.tolist()
@@ -17,7 +19,6 @@ Yt_list = [
     (round(price_list[0], 2), timestamp)  
     for price_list, timestamp in actualVals
 ]
-print(Yt_list[0])
 
 def plotChart(vals, predictedVals):
   dates_arr1 = [item[1] for item in predictedVals]
@@ -43,20 +44,22 @@ def plotChart(vals, predictedVals):
   plt.xticks(rotation=45, ha='right')
   plt.tight_layout()
   plt.show()
+
+articleScore = 0
 def armaModel(vals, alpha):
   predictions = []
   phi = 0.5
   theta = 0.5
   predError = 0
-  prevError = 0
   i = 1
   while i < len(vals):
-    predictedVal = (phi * vals[i-1][0]) + (theta * predError)
+    predictedVal = ((phi + 0.104 * articleScore) * vals[i-1][0]) + (theta * predError)
     predError = vals[i][0] - predictedVal
+
     phi = phi + alpha * predError * vals[i-1][0]
     theta = theta + alpha * predError * predError
+
     predictions.append((round(predictedVal, 2), vals[i][1]))
-    prevError = predError
     i = i + 1
   return predictions
 def mae(arr1, arr2, testStartPoint):
@@ -66,11 +69,10 @@ def mae(arr1, arr2, testStartPoint):
     sum += abs(arr1[i][0] - arr2[i][0])
   return round(sum / len(arr2), 2)
 
-size = 900
-vals = Yt_list[:size]
-predictedVals = armaModel(vals, 5e-11)
+vals = Yt_list
+predictedVals = armaModel(vals, alpha)
 i = 0
-vals = Yt_list[1:size]
+vals = Yt_list
 errorVal = mae(vals, predictedVals, "2023-01-01")
 print(f'MAE: {errorVal}')
 plotChart(vals, predictedVals)
